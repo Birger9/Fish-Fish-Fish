@@ -24,7 +24,6 @@ public class Point2D {
 
     /**
      * inverted method inverts a Point2D x- and y-value.
-     * @param Nothing.
      * @return Point2D new inverted Point2D object
      */
     public Point2D inverted(){
@@ -181,7 +180,6 @@ public class Point2D {
     /**
      * add method adds the values of this point with another point.
      * @param other The point to add.
-     * @return Nothing
      */
     public void add(Point2D other) {
         x += other.x;

@@ -1,14 +1,12 @@
 package entity;
 
 import game.AppPanel;
-import media.AudioLoader;
 import media.MovingText;
+import media.Sprite;
 import util.Point2D;
+import util.PropertiesLoaderBorrowedCode;
 
 import java.awt.*;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Random;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -21,10 +19,19 @@ import java.util.concurrent.TimeUnit;
  */
 public class Fish extends Entity {
 
-    // Moving text varibles
-    protected static final float MOVING_TEXT_VEL = 10.0f;
-    protected static final int MOVING_TEXT_SIZE = 15;
-    public static final float SEC_TO_MS = 1000.0f;
+    private PropertiesLoaderBorrowedCode defaultSettings = new PropertiesLoaderBorrowedCode("src/defaultsettings");
+
+    // Load default props
+    // Moving text variables
+    protected final float movingTextVel = (float) defaultSettings.getValue("fish.movingText.vel", float.class);
+    protected final int movingTextSize = (int) defaultSettings.getValue("fish.movingText.size", int.class);
+    private final int distanceOfRemoval = (int) defaultSettings.getValue("fish.distanceOfRemoval", int.class); // Remove fish that are this many pixels away from the player
+
+    // EXPERIENCE FORMULA
+    // TOTAL_FACTOR * (EXP_FACTOR * LEVEL^EXPONENT)
+    private final static float TOTAL_FACTOR = 100;
+    private final static float EXP_FACTOR = 3;
+    private final static float EXPONENT = 1.5f;
 
     protected Point2D velocity;
     protected int level;
@@ -44,54 +51,73 @@ public class Fish extends Entity {
 
     protected boolean isInvulnerable = false;
     protected boolean isDead = false; // Entities that should be removed from the game (incl. universe & fishList)
-    private static final int DISTANCE_OF_REMOVAL = 1900; // Remove fish that are this many pixels away from the player
 
-    // EXPERIENCE FORMULA
-    // TOTAL_FACTOR * (EXP_FACTOR * LEVEL^EXPONENT)
-    private static final float TOTAL_FACTOR = 100.0f;
-    private static final float EXP_FACTOR = 3.0f;
-    private static final float EXPONENT = 1.5f;
-
-
-    private static final Random RANDOM = new Random();
+    private FishFactory factory;
 
     /**
      * Constructor that initializes a Fish object, adds the object to the universe and
      * the fishList.
      */
-    public Fish(Point2D position, Point2D size, Point2D velocity, int level, boolean addToUniverse) {
-        super(position, size);
+    public Fish(Point2D position, Point2D size, Point2D velocity, int level, boolean addToUniverse, FishFactory factory, AppPanel appPanel) {
+        super(position, size, appPanel);
         this.velocity = velocity;
         this.level = level;
 
-        colliderSize = size; // Default size (if the size parameter is specified)
-        FishFactory.getFishList().add(this);
+        colliderSize = size;
+        factory.getFishList().add(this);
+        this.factory = factory;
 
         if (addToUniverse)
-            AppPanel.getUniverse().addEntity(this);
+            appPanel.getUniverse().addEntity(this);
     }
 
     /**
      * Constructor that initializes a Fish object, adds the object to the universe and
      * the fishList. This is for fish that have no specific velocity upon initialization
      */
-    public Fish(Point2D position, Point2D size, int level, boolean addToUniverse) {
-        super(position, size);
+    public Fish(Point2D position, Point2D size, int level, boolean addToUniverse, FishFactory factory, AppPanel appPanel) {
+        super(position, size, appPanel);
         this.level = level;
 
         velocity = new Point2D(0, 0);
-        colliderSize = size; // Default size (if the size parameter is specified)
-        FishFactory.getFishList().add(this);
+        colliderSize = size;
+        factory.getFishList().add(this);
+        this.factory = factory;
 
         if (addToUniverse)
-            AppPanel.getUniverse().addEntity(this);
+            appPanel.getUniverse().addEntity(this);
+    }
+
+    public Fish(Point2D position, Point2D size, int level, boolean addToUniverse, FishFactory factory, AppPanel appPanel, Sprite sprite, boolean flipSprite) {
+        super(position, size, sprite, appPanel);
+        this.level = level;
+
+        velocity = new Point2D(0, 0);
+        colliderSize = size;
+        this.flipSprite = flipSprite;
+        factory.getFishList().add(this);
+        this.factory = factory;
+
+        if (addToUniverse)
+            appPanel.getUniverse().addEntity(this);
+    }
+
+    public Fish(Point2D position, Point2D size, Point2D velocity, int level, boolean addToUniverse, FishFactory factory, AppPanel appPanel, Sprite sprite) {
+        super(position, size, sprite, appPanel);
+        this.velocity = velocity;
+        this.level = level;
+
+        colliderSize = size; // Default size (if the size parameter is specified)
+        factory.getFishList().add(this);
+        this.factory = factory;
+
+        if (addToUniverse)
+            appPanel.getUniverse().addEntity(this);
     }
 
     /**
      * update method updates collision boxes, movement, and kills the Fish
      * if it is too far from the player
-     * @param Nothing.
-     * @return Nothing.
      */
     public void update() {
         facingRight = isFacingRight(); // Set look direction based on x velocity
@@ -100,38 +126,40 @@ public class Fish extends Entity {
             move(velocity);
         }
         // Kill this fish if distance to the player is too great
-        if (!this.equals(AppPanel.getPlayer())) {
-            if (AppPanel.getPlayer().getPlayerCenter().distanceTo(this.position) > DISTANCE_OF_REMOVAL) {
+        if (!this.equals(appPanel.getPlayer())) {
+            if (appPanel.getPlayer().getPlayerCenter().distanceTo(this.position) > distanceOfRemoval) {
                 isDead = true;
             }
         }
         updateBodyCollider();
         updateMouthCollider();
 
-        checkCollision();
+        updateCollision();
     }
 
-    protected void checkCollision() {
-        for(Fish other : FishFactory.getFishList()) {
+    /**
+     * Check mouth/body collision with all the other fish.
+     */
+    protected void updateCollision() {
+        for(Fish other : factory.getFishList()) {
             if (other.equals(this) || other.isDead) {
                 continue;
             }
-            checkMouthCollision(other);
-            checkBodyCollision(other);
+            updateMouthCollision(other);
+            updateBodyCollision(other);
         }
 
     }
 
     /**
      * checkMouthCollision method handles the logic for if a fish eats another fish
-     * @param Nothing.
-     * @return Nothing.
+     * @param other The other fish.
      */
-    protected void checkMouthCollision(Fish other) {
+    protected void updateMouthCollision(Fish other) {
         if (other.isInvulnerable) return;
 
         if (level > other.level) {
-            if (mouthCollidesWith(other)) {
+            if (hasMouthCollision(other)) {
                 other.isDead = true;
             }
         }
@@ -139,51 +167,30 @@ public class Fish extends Entity {
 
     /**
      * checkMouthCollision method handles the logic for if the body of this fish collides with the mouth of another fish
-     * @param Nothing.
-     * @return Nothing.
+     * @param other The other fish.
      */
-    protected void checkBodyCollision(Fish other) {
+    protected void updateBodyCollision(Fish other) {
 
     }
 
     /**
      * die method is called when a fish dies. This should, amongst other things, award xp to the player
-     * @param Nothing.
-     * @return Nothing.
      */
     public void die() {
         if (isDead) return;
         int experience = xpFromLevel(level);
-        AppPanel.getPlayer().gainExperience(experience);
-        MovingText.getMovingTexts().add(
-                new MovingText(AppPanel.getPlayer().position, MOVING_TEXT_VEL, "+" + experience, MOVING_TEXT_SIZE, Color.WHITE)
+        appPanel.getPlayer().gainExperience(experience);
+        appPanel.getMovingTexts().add(
+                new MovingText(appPanel.getPlayer().position, movingTextVel, "+" + experience, movingTextSize, Color.WHITE)
         );
-        AudioLoader.playClip("BITE");
+        appPanel.getAudioLoader().playClip("BITE");
         isDead = true;
     }
 
     /**
-     * removeDead method removes fish that are marked as dead from the FishList and Universe. This has no effect on the player.
-     * @param Nothing.
-     * @return Nothing.
-     */
-    public static void removeDead() {
-        List<Fish> toRemove = new ArrayList<>();
-        for(Fish fish : FishFactory.getFishList()){
-            if (fish.isDead && !(fish.equals(AppPanel.getPlayer()))) {
-                toRemove.add(fish);
-            }
-        }
-        for (Fish fish : toRemove) {
-            AppPanel.getUniverse().getEntityList().remove(fish);
-            FishFactory.getFishList().remove(fish);
-        }
-    }
-
-    /**
      * xpFromLevel method returns how much experience the fish should give upon dying
-     * @param int, the level of the fish.
-     * @return int, the amount of experience that should be gained.
+     * @param level The level of the fish.
+     * @return The amount of experience that should be gained.
      */
     protected static int xpFromLevel(int level) {
         return (int) (TOTAL_FACTOR * (EXP_FACTOR * Math.pow(level, EXPONENT)));
@@ -192,19 +199,17 @@ public class Fish extends Entity {
     /**
      * setSize method sets the the mouthsize and size of the fish. This should normally be overridden in each respective
      * subclass that extends Fish in order to properly scale the fish to fit its corresponding sprite dimensions.
-     * @param Nothing.
-     * @return Nothing.
      */
     protected void setSize(){
         size = Point2D.product(size, level); // Scale manually
-        mouthSize = level * 10;
+        final int mouthScaleFactor = 10;
+        mouthSize = level * mouthScaleFactor;
     }
 
     /**
      * render method renders the sprite of the fish, depending on which way
      * it is facing.
-     * @param Graphics object.
-     * @return Nothing.
+     * @param g The graphics object.
      */
     @Override
     public void render(Graphics g) {
@@ -237,7 +242,6 @@ public class Fish extends Entity {
     /**
      * renderColliderBounds method renders the mouth and body collide boxes for the fish
      * @param Graphics object.
-     * @return Nothing.
      */
     private void renderColliderBounds(Graphics g) {
         // DRAW BODY COLLIDER BOUNDS
@@ -251,8 +255,6 @@ public class Fish extends Entity {
 
     /**
      * updateBodyCollider method sets the bounds of the bodyCollider
-     * @param Nothing.
-     * @return Nothing.
      */
     protected void updateBodyCollider() {
         bodyCollider.setBounds(
@@ -266,8 +268,6 @@ public class Fish extends Entity {
     /**
      * updateMouthCollider method sets the mouth collider bounds and moves it to the left/right side of the fish based on the
      * direction it is facing.
-     * @param Nothing.
-     * @return Nothing.
      */
     protected void updateMouthCollider() {
         int xPos = (int)(position.getX()); // Collider should be on the left side
@@ -283,20 +283,16 @@ public class Fish extends Entity {
 
     /**
      * remove method removes the fish from the FishList in addition to removing it from the universe.
-     * @param Nothing.
-     * @return Nothing.
      */
     @Override
     protected void remove() {
-        AppPanel.getUniverse().removeEntity(this);
-        FishFactory.getFishList().remove(this);
+        appPanel.getUniverse().removeEntity(this);
+        factory.getFishList().remove(this);
     }
 
     /**
-     * render method periodically toggles the visibility of an entity
+     * grantInvulnerability method makes a fish invulnerable for a set amount of time.
      * @param durationInSeconds The blink duration in seconds.
-     * @param frequency The blink frequency in seconds.
-     * @return Nothing.
      */
     public void grantInvulnerability(float durationInSeconds) {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -309,7 +305,7 @@ public class Fish extends Entity {
         };
         if (!isInvulnerable) {
             isInvulnerable = true;
-            scheduler.schedule(turnOffInvulnerability, (long) (SEC_TO_MS * durationInSeconds), TimeUnit.MILLISECONDS);
+            scheduler.schedule(turnOffInvulnerability, (long) (1000 * durationInSeconds), TimeUnit.MILLISECONDS);
         }
     }
 
@@ -319,26 +315,22 @@ public class Fish extends Entity {
      * @param other The other fish.
      * @return true if the given mouthCollider colliders with the bodyCollider of another (specified) fish.
      */
-    protected boolean mouthCollidesWith(Fish other) {
+    protected boolean hasMouthCollision(Fish other) {
         return mouthCollider.intersects(other.bodyCollider);
     }
 
     /**
-     * mouthCollidesWith method returns true if a bodyCollider collides with the
-     * mouthCollider of another fish, and false otherwise.
+     * Return true if a bodyCollider collides with the mouthCollider of another fish.
      * @param other The other fish.
      * @return true if the given bodyCollider colliders with the mouthCollider of another (specified) fish.
      */
-    protected boolean bodyCollidesWith(Fish other) {
+    protected boolean hasBodyCollision(Fish other) {
         return bodyCollider.intersects(other.mouthCollider);
     }
 
 
     /**
-     * isFacingRight method returns true if the velocity is greater than 0. Then we know that the fish
-     * is traveling to the right. Returns false otherwise.
-     * @param Nothing.
-     * @return Nothing.
+     * Return whether or not a fish should be facing left or right, based on its velocity.
      */
     protected boolean isFacingRight() {
         if (velocity != null)

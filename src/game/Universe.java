@@ -12,7 +12,7 @@ import java.util.List;
  */
 public class Universe {
 
-    private List<Entity> entityList = new ArrayList<>();
+    private List<Entity> entities = new ArrayList<>();
 
     public Universe() {
     }
@@ -20,10 +20,9 @@ public class Universe {
     /**
      * move method moves the all the entities in the universe
      * @param delta Delta value.
-     * @return Nothing.
      */
     public void move(Point2D delta) {
-	for (Entity e : entityList) {
+	for (Entity e : entities) {
 	    e.move(delta);
 	}
     }
@@ -31,31 +30,28 @@ public class Universe {
     /**
      * addEntities method adds a collection of entities to the universe.
      * @param entities The entities to add.
-     * @return nothing.
      */
     public void addEntities(Collection<Entity> entities) {
-	entityList.addAll(entities);
+	this.entities.addAll(entities);
     }
 
     /**
      * addEntity method adds an entity to the universe..
      * @param entity The entity to add.
-     * @return Nothing.
      */
     public void addEntity(Entity entity) {
-	entityList.add(entity);
+	entities.add(entity);
     }
 
     /**
      * removeEntity method removes an entity to the universe..
      * @param entity The entity to remove.
-     * @return Nothing.
      */
     public void removeEntity(Entity entity) {
-        entityList.remove(entity);
+        entities.remove(entity);
     }
 
-    public List<Entity> getEntityList() {
-	    return entityList;
+    public List<Entity> getEntities() {
+	    return entities;
     }
 }

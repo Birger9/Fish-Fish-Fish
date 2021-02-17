@@ -10,7 +10,7 @@ import java.awt.*;
 public class EntityDummy extends Entity {
 
     public EntityDummy(Point2D position, Point2D size) {
-        super(position, size);
+        super(position, size, null);
     }
 
     @Override

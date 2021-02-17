@@ -1,0 +1,138 @@
+####################
+## BASIC SETTINGS ##
+####################
+
+screen.width=1000
+screen.height=700
+map.width=1600
+map.height=1200
+enemy.spawnRate=0.03
+
+background.sprite.width=3264
+background.sprite.height=2448
+
+###################
+## FISH SETTINGS ##
+###################
+
+fish.movingText.vel=10
+fish.movingText.size=15
+fish.distanceOfRemoval=1900
+
+###########################
+## FISH FACTORY SETTINGS ##
+###########################
+
+fishFactory.fishSpeed=1.1
+fishFactory.screenMargin=320
+fishFactory.barracuda.additionalMargin=500
+
+#####################
+## PLAYER SETTINGS ##
+#####################
+
+player.startSize=30
+player.spriteSize=128
+
+# Thrust settings
+player.thrust.speed=1.5 
+player.thrust.duration=1.5
+player.thrust.timeIncrement=0.01
+player.maxVelocity=1.5
+
+# Moving text settings
+player.movingText.vel=2
+player.movingText.size=30
+
+# Xp settings
+player.xp.initialXpToNextLvl=7000
+player.xp.maxLevel=3
+
+# Collider settings
+player.collider.mouthSizeFactor=0.5
+
+##########################
+## BASIC ENEMY SETTINGS ##
+##########################
+
+# Small
+basicEnemy.small.width=50
+basicEnemy.small.height=16
+
+# School
+basicEnemy.school.spawnRate=0.9
+
+# Medium
+basicEnemy.medium.width=64
+basicEnemy.medium.height=32
+basicEnemy.medium.mouthSize=20
+basicEnemy.medium.spawnRate=0.6
+
+# Large
+basicEnemy.large.width=128
+basicEnemy.large.height=128
+basicEnemy.large.mouthSize=40
+basicEnemy.large.spawnRate=0.2
+
+#####################
+## SCHOOL SETTINGS ##
+#####################
+
+school.spacing=20
+school.velocity.offset.x=0.5
+school.velocity.offset.y=0.7
+
+########################
+## BARRACUDA SETTINGS ##
+########################
+
+# Wait settings (upon being bitten by player)
+barracuda.wait.time=3
+
+# Chase settings
+barracuda.chase.time=5
+barracuda.chase.velocity=5
+
+# Size & collider settings
+barracuda.size.width=450
+barracuda.size.height=180
+
+barracuda.collider.size.x=50
+barracuda.collider.size.y=50
+
+barracuda.collider.offset.x=150
+barracuda.collider.offset.y=50
+
+barracuda.collider.mouth.size=50
+barracuda.collider.mouth.offset.x=-180
+barracuda.collider.mouth.offset.y=80
+
+barracuda.xp.tailBite=1000
+barracuda.xp.tailBite.text.offset.y=40
+
+barracuda.spawnRate=0.2
+
+#####################
+## CAMERA SETTINGS ##
+#####################
+
+# Distance at which to start moving the camera towards the player (deadzone)
+camera.returnDistance=40
+camera.returnVelocity=0.5f
+
+# Affects responsiveness to velocity changes
+camera.maxMovListSamples=40
+
+##################
+## HUD SETTINGS ##
+##################
+
+hud.progressBar.borderThickness=2
+hud.progressBar.roundness=7
+hud.progressBar.x=20
+hud.progressBar.y=20
+hud.progressBar.width=400
+hud.progressBar.height=8
+
+hud.score.textSize = 20
+hud.score.increment = 35

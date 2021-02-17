@@ -19,22 +19,29 @@ import java.util.concurrent.TimeUnit;
  */
 public abstract class Entity {
 
-    public static final float SEC_TO_MS = 1000.0f;
     protected Point2D position;
     protected Point2D size;
     protected Sprite sprite = null;
     protected boolean render = true;
     protected boolean isBlinking = false;
+    protected AppPanel appPanel;
 
-    protected Entity(Point2D position, Point2D size) {
+    protected Entity(Point2D position, Point2D size, AppPanel appPanel) {
         this.position = position;
         this.size = size;
+        this.appPanel = appPanel;
+    }
+
+    protected Entity(Point2D position, Point2D size, Sprite sprite, AppPanel appPanel) {
+        this.position = position;
+        this.size = size;
+        this.sprite = sprite;
+        this.appPanel = appPanel;
     }
 
     /**
      * move sets the position of an entity, with an x- and y pos
      * @param Point2D new position.
-     * @return Nothing.
      */
     public void move(Point2D delta) {
 	position = Point2D.sum(position, delta);
@@ -43,19 +50,21 @@ public abstract class Entity {
     /**
      * render method renders the entitys sprite, if it has one
      * @param Graphics g.
-     * @return Nothing.
      */
     public void render(Graphics g) {
         if (!render) return;
-        if(hasSprite())
-            g.drawImage(sprite.getBufferedImage(), (int)position.getX(), (int)position.getY(), (int)size.getX(), (int)size.getY(), null);
+        if (hasSprite()) {
+            g.drawImage(sprite.getBufferedImage(), (int) position.getX(), (int) position.getY(), (int) size.getX(), (int) size.getY(), null);
+        } else {
+            g.setColor(Color.RED);
+            g.fillRect((int)position.getX(), (int)position.getY(), (int)size.getX(), (int)size.getY());
+        }
     }
 
     /**
      * render method periodically toggles the visibility of an entity
      * @param durationInSeconds The blink duration in seconds.
      * @param frequency The blink frequency in seconds.
-     * @return Nothing.
      */
     public void blink(float durationInSeconds, float frequency) {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
@@ -76,46 +85,21 @@ public abstract class Entity {
         };
         if (!isBlinking) {
             isBlinking = true;
-            scheduler.scheduleAtFixedRate(blink, 0, (long) (SEC_TO_MS / (frequency * 2)), TimeUnit.MILLISECONDS);
+            final float msToSec = 1000.0f;
+            scheduler.scheduleAtFixedRate(blink, 0, (long) (msToSec / (frequency * 2)), TimeUnit.MILLISECONDS);
         }
     }
-
-    /**
-     * render method periodically toggles the visibility of an entity indefinitely
-     * @param frequency The blink frequency in seconds.
-     * @return Nothing.
-     */
-    public void blink(float frequency) {
-        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-
-        final Runnable blink = new Runnable()
-        {
-            private float nBlinks = 0;
-
-            @Override public void run() {
-                render = !render; // toggle render
-            }
-        };
-        if (!isBlinking) {
-            isBlinking = true;
-            scheduler.scheduleAtFixedRate(blink, 0, (long) (SEC_TO_MS / (frequency*2)), TimeUnit.MILLISECONDS);
-        }
-    }
-
 
     /**
      * remove method removes the entity from the universe
-     * @param Nothing.
-     * @return Nothing.
      */
     protected void remove() {
-        AppPanel.getUniverse().removeEntity(this);
+        appPanel.getUniverse().removeEntity(this);
     }
 
     /**
      * getPosition method returns the position of the entity.
-     * @param Nothing.
-     * @return Nothing.
+     * @return The position.
      */
     public Point2D getPosition() {
         return position;
@@ -123,11 +107,10 @@ public abstract class Entity {
 
     /**
      * hasSprite method returns true if the entity has a sprite, otherwise false.
-     * @param Nothing.
-     * @return Nothing.
+     * @return Whether the entity has a sprite.
      */
     public boolean hasSprite() {
-        return sprite != null;
+        return sprite.getHasPath();
     }
 
 }

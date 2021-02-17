@@ -2,12 +2,11 @@ package entity;
 
 import game.AppPanel;
 import game.Camera;
-import media.AudioLoader;
 import media.MovingText;
 import util.Point2D;
+import util.PropertiesLoaderBorrowedCode;
 
 import java.awt.*;
-import java.util.Timer;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -20,54 +19,50 @@ import java.util.concurrent.TimeUnit;
 public class Player extends Fish {
 
     private Camera camera;
+    private PropertiesLoaderBorrowedCode defaultSettings = new PropertiesLoaderBorrowedCode("src/defaultsettings");
 
-    private static final double SCALAR = 0.5; // Used to half the player size
-    private static final float MAX_VELOCITY = 1.5f;
-    private static final float THRUST_TIME_INCREMENT = 0.01f;
+    private final float maxVelocity = (float) defaultSettings.getValue("player.maxVelocity", float.class);
+    private final float thrustTimeIncrement = (float) defaultSettings.getValue("player.thrust.timeIncrement", float.class);
 
-    //When the player dies, moving text
-    private static final float OH_NO_TEXT_VEL = 2.0f;
-    private static final int OH_NO_TEXT_SIZE = 30;
-
-    private double angle = 0;
-
-    public static Timer endTimer = null;
-
-    private static final double THRUST_SPEED = 1.5d; // Thrust speed on mouse click
-    private static final double THRUST_DURATION = 1.5d; // Thrust duration on mouse click
+    private final double thrustSpeed = (double) defaultSettings.getValue("player.thrust.speed", double.class); // Thrust speed on mouse click
+    private final double thrustDuration = (double) defaultSettings.getValue("player.thrust.duration", double.class); // Thrust duration on mouse click
     private boolean isThrusting = false;
 
-    private static final int MAX_LEVEL = 3;
+    private static final double SCALAR = 0.5f; // Used to half the player size
+
+    // Moving text that is instantiated as the player dies.
+    private final float ohNoTextVel = (float) defaultSettings.getValue("player.movingText.vel", float.class);
+    private final int ohNoTextSize = (int) defaultSettings.getValue("player.movingText.size", int.class);
+
+    private final float mouthSizeFactor = (float) defaultSettings.getValue("player.collider.mouthSizeFactor", float.class);
+
+    private final int intialXpToNextLevel = (int) defaultSettings.getValue("player.xp.initialXpToNextLvl", int.class);
+    private int xpToNextLevel = intialXpToNextLevel;
+
+    private final int maxLevel = (int) defaultSettings.getValue("player.xp.maxLevel", int.class);
     private int experience = 0;
-    private static final int INTIAL_XP_TO_NEXT_LEVEL = 7000;
-    private int xpToNextLevel = INTIAL_XP_TO_NEXT_LEVEL;
     private int score = 0;
     private boolean hasWon = false;
 
     private Point2D playerCenter = new Point2D(0, 0);
-    private Point2D positionLastFrame = null;
     private Point2D intialSize;
-    private static final float MOUTH_SIZE_FACTOR = 0.5f;
 
-    public Player(Point2D position, Point2D size, int level) {
-        super(position, size, level, false);
+    public Player(Point2D position, Point2D size, int level, AppPanel appPanel, FishFactory fishFactory) {
+        super(position, size, level, false, fishFactory, appPanel, appPanel.getImageManager().getSpriteHashMap().get("PLAYER"), true);
         setSize();
 
         intialSize = size;
-        sprite = AppPanel.getImageManager().getSpriteHashMap().get("PLAYER");
-        flipSprite = true;
-        FishFactory.getFishList().add(this);
+        fishFactory.getFishList().add(this);
 
-        camera = AppPanel.getMainCam();
+        camera = appPanel.getMainCam();
     }
 
     /**
      * move sets the position of an entity, with an x- and y pos
      * @param Point2D new position.
-     * @return Nothing.
      */
     public void update() {
-        mouthSize = (int)(size.getY() * MOUTH_SIZE_FACTOR);
+        mouthSize = (int)(size.getY() * mouthSizeFactor);
         super.update();
         moveToMouse();
 
@@ -80,32 +75,30 @@ public class Player extends Fish {
 
     /**
      * moveToMouse method moves the player towards the mouse
-     * @param Nothing
-     * @return Nothing.
      */
     private void moveToMouse() {
-        double mouseX = AppPanel.getMouse().x;
-        double mouseY = AppPanel.getMouse().y;
+        double mouseX = appPanel.getMouse().x;
+        double mouseY = appPanel.getMouse().y;
 
         double dist = Point2D.distance(new Point2D(mouseX, mouseY), playerCenter); // Distance from mouse to player
-        double dx = (mouseX - playerCenter.getX()) / (dist + 100);
-	double dy = (mouseY - playerCenter.getY()) / (dist + 100);
+        final int dashSmoothness = 100;
+        double dx = (mouseX - playerCenter.getX()) / (dist + dashSmoothness); // Magic constant: arbitrary value
+	double dy = (mouseY - playerCenter.getY()) / (dist + dashSmoothness);
 
-	velocity.setX(MAX_VELOCITY * dx);
-	velocity.setY(MAX_VELOCITY * dy);
+	velocity.setX(maxVelocity * dx);
+	velocity.setY(maxVelocity * dy);
 
 	position.add(velocity);
 
-	camera.update(AppPanel.getUniverse());
+	camera.update(appPanel.getUniverse());
     }
 
     /**
      * thrust method gives a burst of speed
      * @param Point2D new position.
-     * @return Nothing.
      */
     public void thrust(Point2D targetPosition, double thrustSpeed, double thrustDuration) {
-        AudioLoader.playClip("DASH");
+        appPanel.getAudioLoader().playClip("DASH");
 
         Point2D deltaPosition = new Point2D(
                 targetPosition.getX() - playerCenter.getX(),
@@ -127,10 +120,11 @@ public class Player extends Fish {
 
                     Point2D deltaVelocity = Point2D.xyComponents(currentThrustSpeed, thrustAngle);
                     position.add(deltaVelocity);
-                    camera.updateMovList(Point2D.product(deltaVelocity, new Point2D(6, 6)));
-                    timeElapsed += THRUST_TIME_INCREMENT;
+                    final int cameraDashVel = 6;
+                    camera.updateMovList(Point2D.product(deltaVelocity, new Point2D(cameraDashVel, cameraDashVel)));
+                    timeElapsed += thrustTimeIncrement;
 
-                    if (currentThrustSpeed < 0.01d) {
+                    if (currentThrustSpeed < 0.01d) { // Magic constant: arbitrary small value.
                         currentThrustSpeed = 0;
                         isThrusting = false;
                         scheduler.shutdown();
@@ -143,14 +137,13 @@ public class Player extends Fish {
 
     /**
      * checkMouthCollision method handles the logic for if a fish eats another fish
-     * @param Nothing.
-     * @return Nothing.
+     * @param other The other fish.
      */
-    protected void checkMouthCollision(Fish other) {
+    protected void updateMouthCollision(Fish other) {
         if (other.isInvulnerable) return;
 
         if (level >= other.level) {
-            if (mouthCollidesWith(other)) {
+            if (hasMouthCollision(other)) {
                 other.die();
             }
         }
@@ -158,14 +151,13 @@ public class Player extends Fish {
 
     /**
      * checkMouthCollision method handles the logic for if the body of this fish collides with the mouth of another fish
-     * @param Nothing.
-     * @return Nothing.
+     * @param other The other fish.
      */
-    protected void checkBodyCollision(Fish other) {
+    protected void updateBodyCollision(Fish other) {
         if (isInvulnerable) return;
 
         if (level < other.level) {
-            if (bodyCollidesWith(other)) {
+            if (hasBodyCollision(other)) {
                 die();
             }
         }
@@ -174,7 +166,6 @@ public class Player extends Fish {
     /**
      * move sets the position of an entity, with an x- and y pos
      * @param Point2D new position.
-     * @return Nothing.
      */
     public void gainExperience(int increment) {
         experience += increment;
@@ -184,59 +175,59 @@ public class Player extends Fish {
     /**
      * move sets the position of an entity, with an x- and y pos
      * @param Point2D new position.
-     * @return Nothing.
      */
     private void levelUp() {
-        if(level < MAX_LEVEL) {
+        if(level < maxLevel) {
             experience = 0;
             level++;
 
-            size = Point2D.product(size, 2);
+            size = Point2D.product(size, 2); // Magic constant: Size is always doubled
             colliderSize = size;
-            xpToNextLevel *= 3;
-        }else if (!hasWon) {
-                hasWon = true;
-                Point2D middleOfScreen = new Point2D(AppPanel.getScreenWidth()/4, AppPanel.getScreenHeight()/2);
-                // It's divided by 4 so the text "You win!" is in the middle of the screen
-
-                MovingText.getMovingTexts().add(
-                        new MovingText(middleOfScreen, 0, "YOU WIN!", 100, Color.GREEN)
-                );
-
-                ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
-                final Runnable exitGame = new Runnable(){
+            final int nextLevelXpFactor = 3;
+            xpToNextLevel *= nextLevelXpFactor;
+        } else if (!hasWon) {
+            hasWon = true;
+            final Point2D textAlignmentDivisor = new Point2D(4.0f, 2.0f);
+            Point2D middleOfScreen = new Point2D(appPanel.getScreenWidth()/textAlignmentDivisor.getX(),
+                                                 appPanel.getScreenHeight()/textAlignmentDivisor.getY());
+            final int victoryTextSize = 100;
+            appPanel.getMovingTexts().add(
+                    new MovingText(middleOfScreen, 0, "YOU WIN!", victoryTextSize, Color.GREEN)
+            );
+            ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+            final Runnable exitGame = new Runnable(){
                     @Override
                     public void run() {
                         System.exit(0); // Terminates the program
                     }
                 };
-                scheduler.schedule(exitGame, (3), TimeUnit.SECONDS); // Schedules a new action in 3 seconds
-                scheduler.shutdown(); // Closes the thread
-            }
-
+            scheduler.schedule(exitGame, 3, TimeUnit.SECONDS); // Magic constant: Doesn't particularly matter - wait for an arbitrary small amount of time
+            scheduler.shutdown(); // Closes the thread
+        }
     }
 
     @Override
     public void die() {
-        AudioLoader.playClip("BITE");
-        blink(5, 2);
-        grantInvulnerability(5);
+        appPanel.getAudioLoader().playClip("BITE");
+        final int blinkDur = 5;
+        final int blinkFreq = 2;
+        blink(blinkDur, blinkFreq);
+        grantInvulnerability(blinkDur);
         resetStats();
-        MovingText.getMovingTexts().add(
-                new MovingText(AppPanel.getPlayer().position, OH_NO_TEXT_VEL, "OH NO!", OH_NO_TEXT_SIZE, Color.RED)
+        appPanel.getMovingTexts().add(
+                new MovingText(position, ohNoTextVel, "OH NO!", ohNoTextSize, Color.RED)
         );
     }
 
     /**
      * move sets the position of an entity, with an x- and y pos
      * @param Point2D new position.
-     * @return Nothing.
      */
     private void resetStats() {
-        level = 1;
+        level = 1; // Magic constant: Level 1 is always default, and always will be.
         experience = 0;
         score = 0;
-        xpToNextLevel = INTIAL_XP_TO_NEXT_LEVEL; // Reset experience required to level up
+        xpToNextLevel = intialXpToNextLevel; // Reset experience required to level up
         size = intialSize; // Reset size
         colliderSize = intialSize;
     }
@@ -248,25 +239,19 @@ public class Player extends Fish {
      */
     @Override
     protected boolean isFacingRight() {
-        return AppPanel.getMouse().x > playerCenter.getX();
+        return appPanel.getMouse().x > playerCenter.getX();
     }
 
     /**
      * move sets the position of an entity, with an x- and y pos
      * @param Point2D new position.
-     * @return Nothing.
      */
     public void thrust(Point2D targetPosition) {
-        thrust(targetPosition, THRUST_SPEED, THRUST_DURATION);
+        thrust(targetPosition, thrustSpeed, thrustDuration);
     }
 
-    /**
-     * move sets the position of an entity, with an x- and y pos
-     * @param Point2D new position.
-     * @return Nothing.
-     */
-    public Point2D velocityVector() {
-        return Point2D.xyComponents(MAX_VELOCITY, angle);
+    public void setCamera(Camera camera) {
+        this.camera = camera;
     }
 
     public Point2D getPlayerCenter() {

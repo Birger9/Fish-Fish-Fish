@@ -2,29 +2,41 @@ package entity;
 
 import game.AppPanel;
 import util.Point2D;
+import util.PropertiesLoaderBorrowedCode;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
 /**
- * The FishFactory class uses the factory pattern to retrieve new fish. The class uses an enum to select fish based on its type.
+ * The FishFactory class is used to retrieve new fish. The class uses an enum to select fish based on its type.
  */
 public class FishFactory {
 
     private static final Random RANDOM = new Random();
-    private static final float Y_VEL_OFFSET = 0.5f;
-    private static final int BARR_LEVEL = 15;
-    private static final float SPAWN_CAP_BARR = 0.2f;
-    private static final float SPAWN_CAP_LAR = 0.2f;
-    private static final float SPAWN_CAP_MED = 0.6f;
-    private static final float SPAWN_CAP_SCHOOL = 0.9f;
-    public static final int BARRACUDA_ADDITIONAL_MARGIN = 500;
-    private static List<Fish> fishList = new ArrayList<>();
-    private static final int SCREEN_MARGIN = 320; // Dictates how far away from the outside of the screen that fish should spawn
-    private static final float FISH_SPEED = 0.7f;
+    private PropertiesLoaderBorrowedCode defaultSettings = new PropertiesLoaderBorrowedCode("src/defaultsettings");
 
-    private FishFactory(){
+    private List<Fish> fishList = new ArrayList<>();
+
+    private final int screenMargin = (int) defaultSettings.getValue("fishFactory.screenMargin", int.class); // Dictates how far away from the outside of the screen that fish should spawn
+    private final int barracudaAdditionalMargin = (int) defaultSettings.getValue("fishFactory.barracuda.additionalMargin", int.class);
+    private final float fishSpeed = (float) defaultSettings.getValue("fishFactory.fishSpeed", float.class);
+
+    private AppPanel appPanel;
+    private float barracudaSpawnRate;
+    private float largeSpawnRate;
+    private float mediumSpawnRate;
+    private float schoolSpawnRate;
+
+    /**
+     * Read spawn rates from props.
+     */
+    public FishFactory (AppPanel appPanel) {
+        this.appPanel = appPanel;
+        barracudaSpawnRate = (float) defaultSettings.getValue("barracuda.spawnRate", float.class);
+	largeSpawnRate = (float) defaultSettings.getValue("basicEnemy.large.spawnRate", float.class);
+	mediumSpawnRate = (float) defaultSettings.getValue("basicEnemy.medium.spawnRate", float.class);
+	schoolSpawnRate = (float) defaultSettings.getValue("basicEnemy.school.spawnRate", float.class);
     }
 
     /**
@@ -32,80 +44,100 @@ public class FishFactory {
      * @param FishType the type of fish that should be spawned.
      * @return Fish, the new fish.
      */
-    public static Fish getFish(FishType fishType) {
+    public Fish getFish(FishType fishType) {
 	int direction = RANDOM.nextBoolean() ? 1 : -1;
-	int xPos = direction == 1 ? -SCREEN_MARGIN : AppPanel.getScreenWidth() + SCREEN_MARGIN;
+	int xPos = direction == 1 ? -screenMargin : appPanel.getScreenWidth() + screenMargin;
 
+	final float yVelOffset = 0.5f; 
+	
         switch(fishType) {
 	    case SMALL_FISH:
 	        return new BasicEnemy(
-	        	new Point2D(xPos, RANDOM.nextDouble() * AppPanel.getMapHeight()),
+	        	new Point2D(xPos, RANDOM.nextDouble() * appPanel.getMapHeight()),
 			new Point2D(),
-			new Point2D(FISH_SPEED * direction, RANDOM.nextDouble() - Y_VEL_OFFSET),
-			1
+			new Point2D(fishSpeed * direction, RANDOM.nextDouble() - yVelOffset),
+			1, this, appPanel
 		);
 	    case MEDIUM_FISH:
 		return new BasicEnemy(
-			new Point2D(xPos, RANDOM.nextDouble() * AppPanel.getMapHeight()),
+			new Point2D(xPos, RANDOM.nextDouble() * appPanel.getMapHeight()),
 			new Point2D(),
-			new Point2D(FISH_SPEED * direction, RANDOM.nextDouble() - Y_VEL_OFFSET),
-			2
+			new Point2D(fishSpeed * direction, RANDOM.nextDouble() - yVelOffset),
+			2, this, appPanel
 		);
 	    case LARGE_FISH:
 		return new BasicEnemy(
-			new Point2D(xPos, RANDOM.nextDouble() * AppPanel.getMapHeight()),
+			new Point2D(xPos, RANDOM.nextDouble() * appPanel.getMapHeight()),
 			new Point2D(),
-			new Point2D(FISH_SPEED * direction, RANDOM.nextDouble() - Y_VEL_OFFSET),
-			3
+			new Point2D(fishSpeed * direction, RANDOM.nextDouble() - yVelOffset),
+			3, this, appPanel
 		);
 	    case BARRACUDA:
+	        final int vel = 7;
 	        return new Barracuda(
-			new Point2D(xPos + BARRACUDA_ADDITIONAL_MARGIN * Math.signum(xPos), RANDOM.nextDouble() * AppPanel.getMapHeight()),
+			new Point2D(xPos + barracudaAdditionalMargin * Math.signum(xPos), RANDOM.nextDouble() * appPanel.getMapHeight()),
 			new Point2D(),
-			new Point2D(7 * direction, 0), BARR_LEVEL, true
+			new Point2D(vel * direction, 0), true, this, appPanel
 		);
 	    case SCHOOL:
+	        final int schoolCountVariation = 4;
+	        final int schoolCountLowest = 3;
 	        return new School(
-			new Point2D(xPos, RANDOM.nextDouble() * AppPanel.getMapHeight()),
+			new Point2D(xPos, RANDOM.nextDouble() * appPanel.getMapHeight()),
 			new Point2D(),
-			new Point2D(FISH_SPEED * direction, RANDOM.nextDouble() - Y_VEL_OFFSET),
-			3 + (int)(Math.random() * 4) // 3-7
+			new Point2D(fishSpeed * direction, RANDOM.nextDouble() - yVelOffset),
+			this, appPanel,
+			schoolCountLowest + (int)(Math.random() * schoolCountVariation) // 3-7
 		);
 
 	}
-	return new Fish(new Point2D(), new Point2D(), new Point2D(), 0, false);
+	return new Fish(new Point2D(), new Point2D(), new Point2D(), 0, false, this, appPanel);
     }
 
     /**
      * spawnFishAroundPlayer method creates new fish around the player to populate the beautiful ocean
-     * @param SpawnRate the rate of which fish should spawn.
-     * @return Nothing
+     * @param SpawnRate the rate (or frequency) of which fish should spawn.
      */
-    public static void spawnFishAroundPlayer(float spawnRate) {
+    public void spawnFishAroundPlayer(float spawnRate) {
 	if (RANDOM.nextFloat() > spawnRate)
 	    return;
 
-	if (Math.random() <= SPAWN_CAP_BARR) { // 20% chance to spawn
-	    Barracuda barracuda = (Barracuda) getFish(FishType.BARRACUDA);
+	if (Math.random() <= barracudaSpawnRate) { // 20% chance to spawn
+	    getFish(FishType.BARRACUDA);
 	}
-
 	float spawnChance = RANDOM.nextFloat();
-	if (spawnChance < SPAWN_CAP_LAR) { // 20% chance to spawn
-	    Fish fish = getFish(FishType.LARGE_FISH);
+	if (spawnChance < largeSpawnRate) { // 20% chance to spawn
+	    getFish(FishType.LARGE_FISH);
 	}
-	else if (spawnChance < SPAWN_CAP_MED) { // 40% chance to spawn
-	    Fish fish = getFish(FishType.MEDIUM_FISH);
+	else if (spawnChance < mediumSpawnRate) { // 40% chance to spawn
+	    getFish(FishType.MEDIUM_FISH);
 	}
-	else if (spawnChance < SPAWN_CAP_SCHOOL) { // 30% chance to spawn
-	    School school = (School) getFish(FishType.SCHOOL);
+	else if (spawnChance < schoolSpawnRate) { // 30% chance to spawn
+	    getFish(FishType.SCHOOL);
 	}
 	else { // 10%
-	    Fish fish = getFish(FishType.SMALL_FISH);
+	    getFish(FishType.SMALL_FISH);
 	}
 
     }
 
-    public static List<Fish> getFishList() {
+    /**
+     * removeDead method removes fish that are marked as dead from the FishList and Universe. This has no effect on the player.
+     */
+    public void removeDead() {
+	List<Fish> toRemove = new ArrayList<>();
+	for(Fish fish : fishList){
+	    if (fish.isDead && !(fish.equals(appPanel.getPlayer()))) {
+		toRemove.add(fish);
+	    }
+	}
+	for (Fish fish : toRemove) {
+	    appPanel.getUniverse().getEntities().remove(fish);
+	    fishList.remove(fish);
+	}
+    }
+
+    public List<Fish> getFishList() {
 	return fishList;
     }
 

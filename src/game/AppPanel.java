@@ -11,14 +11,17 @@ import java.awt.event.ActionListener;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
 import java.awt.event.MouseMotionListener;
+import java.util.ArrayList;
+import java.util.List;
 
 import media.ImageManager;
 import media.HUD;
-import media.AudioManager;
+import media.AudioManagerBorrowedCode;
 import media.AudioLoader;
 import media.MovingText;
 
 import util.Point2D;
+import util.PropertiesLoaderBorrowedCode;
 
 /**
  * The game.AppPanel class serves as the GUI Window for the application and contains high-level game logic through method calls
@@ -28,35 +31,36 @@ import util.Point2D;
  */
 public class AppPanel extends JComponent implements ActionListener, MouseMotionListener, MouseListener
 {
-    private static Camera mainCam = new Camera();
+    private PropertiesLoaderBorrowedCode defaultSettings = new PropertiesLoaderBorrowedCode("src/defaultsettings");
 
-    private static final int SCREEN_WIDTH = 1000; // Window width
-    private static final int SCREEN_HEIGHT = 700; // Window height
+    private final int screenWidth = (int) defaultSettings.getValue("screen.width", int.class); // Window width
+    private final int screenHeight = (int) defaultSettings.getValue("screen.height", int.class); // Window height
 
-    private static final int MAP_WIDTH = 1600;
-    private static final int MAP_HEIGHT = 1200;
-    private static final int START_SIZE = 30; // Start size for the player fish
-    private static final float SPAWN_RATE = 0.02f;
-    private static final int FPS = 60;
+    private final int mapWidth = (int) defaultSettings.getValue("map.width", int.class);
+    private final int mapHeight = (int) defaultSettings.getValue("map.height", int.class);
+    private final float spawnRate = (float) defaultSettings.getValue("enemy.spawnRate", float.class);
+    private final int startSize = (int) defaultSettings.getValue("player.startSize", int.class); // Start size for the player fish
 
-    private static final int SCORE_TEXT_SIZE = 20;
-    // Progressbar
-    private static final int XPOS = 20; // X-pos for the progressbar
-    private static final int YPOS = 20; // Y-pos for the progressbar
-    private static final int WIDTH_SIZE = 400; // Width of the progressbar
-    private static final int HEIGHT_SIZE = 8; // Height of the progressbar
+    private final static int MAX_FPS = 60;
 
-    private static Player player = null;//new Player(new Point2D(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2), new Point2D(START_SIZE, START_SIZE), 1);
-    private static Point mouse = new Point(); // Mouse position
+    private Player player = null;
+    private Point mouse = new Point(); // Mouse position
 
-    private static ImageManager imageManager = new ImageManager();
-    private static AudioManager audioManager = new AudioManager();
+    private final ImageManager imageManager = new ImageManager();
+    private final AudioManagerBorrowedCode audioManagerBorrowedCode = new AudioManagerBorrowedCode();
 
-    private static Universe universe = new Universe();
+    private AudioLoader audioLoader = new AudioLoader(audioManagerBorrowedCode);
+
+    private final Universe universe = new Universe();
     private Background background;
+    private HUD hud;
+    private Camera mainCam;
+    private List<MovingText> movingTexts = new ArrayList<>();
 
-    private Timer timer = new Timer(1000/FPS, this); // 60 fps
+    private Timer timer = new Timer(1000 / MAX_FPS, this); // 60 fps
     private static final boolean DEBUG_MODE = false;
+
+    private FishFactory fishFactory;
 
     /**
      * Constructor that initializes window, mouse listeners, audio clips, images
@@ -64,20 +68,25 @@ public class AppPanel extends JComponent implements ActionListener, MouseMotionL
      */
     public AppPanel() {
         setDoubleBuffered(true);
-        setPreferredSize(new Dimension(SCREEN_WIDTH, SCREEN_HEIGHT));
+        setPreferredSize(new Dimension(screenWidth, screenHeight));
         addMouseMotionListener(this);
         addMouseListener(this);
 
-        AudioLoader.createAudioClips();
+        audioLoader.createAudioClips();
         imageManager.initImages();
         imageManager.loadImages();
 
         playMusic();
 
-        background = new Background();
+        background = new Background(this);
+        fishFactory = new FishFactory(this);
 
         if (player == null)
-            player = new Player(new Point2D(SCREEN_WIDTH / 2, SCREEN_HEIGHT / 2), new Point2D(START_SIZE, START_SIZE), 1);
+            player = new Player(new Point2D(screenWidth / 2, screenHeight / 2), new Point2D(startSize, startSize), 1, this, fishFactory);
+
+        mainCam = new Camera(this);
+        player.setCamera(mainCam);
+        hud = new HUD(this, player);
     }
 
     @Override
@@ -89,17 +98,17 @@ public class AppPanel extends JComponent implements ActionListener, MouseMotionL
     protected void paintComponent(Graphics g) {
 	super.paintComponent(g);
 
-        FishFactory.spawnFishAroundPlayer(SPAWN_RATE);
+        fishFactory.spawnFishAroundPlayer(spawnRate);
 
         // Background
         background.render(g);
 
         // Render and update fish
-        for(Fish fish : FishFactory.getFishList()) {
+        for(Fish fish : fishFactory.getFishList()) {
             fish.render(g);
             fish.update();
         }
-        Fish.removeDead(); // Removes dead fish
+        fishFactory.removeDead(); // Removes dead fish
 
         player.update();
         player.render(g);
@@ -112,80 +121,83 @@ public class AppPanel extends JComponent implements ActionListener, MouseMotionL
     /**
      * drawHud renders a media.HUD with a progress bar and a score counter and updates moving text objects.
      * @param Graphics object.
-     * @return Nothing.
      */
     private void drawHUD(Graphics g) {
         float alpha = player.getExperience() / (float)player.getXpToNextLevel(); // Progress value
-        HUD.drawProgressBar(new Point2D(XPOS, YPOS), new Point2D(WIDTH_SIZE, HEIGHT_SIZE), alpha, g);
+        hud.drawProgressBar(alpha, g);
 
-        HUD.drawScore(SCORE_TEXT_SIZE, "SCORE: " + HUD.getAnimatedScore(), g, Color.WHITE);
-        updateMovingTexts(g);
+        hud.drawScore("SCORE: " + hud.getAnimatedScore(), g, Color.WHITE);
+        updateMovingTexts(hud, g);
     }
 
 
     /**
      * playMusic plays a random music track.
-     * @param
-     * @return Nothing.
      */
     private void playMusic() {
-        AudioLoader.loopClip("MUSIC", 1);
+        audioLoader.loopClip("MUSIC", 1);
     }
 
     /**
-     * updateMovingTexts handles score texts and moves them to the Score media.HUD position.
-     * @param
-     * @return Nothing.
+     * updateMovingTexts handles score texts and moves them to the Score HUD position.
+     * @param hud The HUD.
+     * @param g The graphics object.
      */
-    private void updateMovingTexts(Graphics g) {
-        for (MovingText mt : MovingText.getMovingTexts()) {
+    private void updateMovingTexts(HUD hud, Graphics g) {
+        List<MovingText> toRemove = new ArrayList<>();
+        for (MovingText mt : movingTexts) {
             mt.render(g);
-            mt.moveToPosition(HUD.getScorePosition()); //Moves the score text to the position of the SCORE media.HUD
+            mt.moveToPosition(hud.getScorePosition());
+            if (mt.getHasReached()) {
+                toRemove.add(mt);
+            }
         }
-        MovingText.removeReached(); // Removes scores, from the screen, that have reached the position of the SCORE media.HUD
+        for (MovingText mt : toRemove) {
+            movingTexts.remove(mt);
+        }
+        toRemove.clear();
+    }
+    public List<MovingText> getMovingTexts() {
+        return movingTexts;
     }
 
-    private static void setPlayer(Player p) {
-        AppPanel.player = p;
+    public int getScreenWidth() {
+        return screenWidth;
     }
 
-    public static int getScreenWidth() {
-        return SCREEN_WIDTH;
+    public int getScreenHeight() {
+        return screenHeight;
     }
 
-    public static int getScreenHeight() {
-        return SCREEN_HEIGHT;
+    public int getMapWidth() {
+        return mapWidth;
     }
 
-    public static int getMapWidth() {
-        return MAP_WIDTH;
+    public int getMapHeight() {
+        return mapHeight;
     }
 
-    public static int getMapHeight() {
-        return MAP_HEIGHT;
-    }
-
-    public static Point getMouse() {
+    public Point getMouse() {
         return mouse;
     }
 
-    public static Player getPlayer() {return player; }
+    public Player getPlayer() {return player; }
 
-    public static Universe getUniverse() { return universe; }
+    public Universe getUniverse() { return universe; }
 
-    public static ImageManager getImageManager() {
+    public ImageManager getImageManager() {
         return imageManager;
     }
 
-    public static AudioManager getAudioManager() {
-        return audioManager;
-    }
-
-    public static Camera getMainCam() {
+    public Camera getMainCam() {
         return mainCam;
     }
 
     public static boolean inDebugMode() { return DEBUG_MODE; }
+
+    public AudioLoader getAudioLoader() {
+        return audioLoader;
+    }
 
     @Override
     public void actionPerformed(ActionEvent e) {
@@ -225,6 +237,6 @@ public class AppPanel extends JComponent implements ActionListener, MouseMotionL
 
     @Override
     public void mouseMoved(MouseEvent e) {
-	AppPanel.mouse = e.getPoint(); // Updates mouse position
+	mouse = e.getPoint(); // Updates mouse position
     }
 }

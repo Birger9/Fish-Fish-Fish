@@ -1,6 +1,8 @@
 package game;
 
+import entity.Player;
 import util.Point2D;
+import util.PropertiesLoaderBorrowedCode;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -12,32 +14,39 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public class Camera {
 
     private Point2D currentPosition = new Point2D(0, 0);
-    private Point2D desiredPosition = new Point2D(AppPanel.getScreenWidth() / 2, AppPanel.getScreenHeight() / 2);
+    private Point2D desiredPosition;
     private List<Point2D> movementList = new CopyOnWriteArrayList<>();
 
-    private static final float CAMERA_RETURN_VELOCITY = 0.5f;
-    private static final int MAX_MOV_LIST_SAMPLES = 40;
-    private static final int CAMERA_RETURN_DISTANCE = 40; // Distance at which to start moving the camera towards the player
+    private PropertiesLoaderBorrowedCode defaultSettings = new PropertiesLoaderBorrowedCode("src/defaultsettings");
 
-    public Camera() {
+    private final float cameraReturnVelocity = (float) defaultSettings.getValue("camera.returnVelocity", float.class);
+    private final int maxMovListSamples = (int) defaultSettings.getValue("camera.maxMovListSamples", int.class);
+    private final int cameraReturnDistance = (int) defaultSettings.getValue("camera.returnDistance", int.class);
 
+    private Player player;
+
+    private AppPanel appPanel;
+
+    public Camera(AppPanel appPanel) {
+	this.appPanel = appPanel;
+	player = appPanel.getPlayer();
+	desiredPosition = new Point2D(appPanel.getScreenWidth() / 2, appPanel.getScreenHeight() / 2);
     }
 
     /**
      * update method updates the camera position from the player's current position
      * @param Universe the universe to move.
-     * @return Nothing.
      */
     public void update(Universe universe) {
-	Point2D newPoint = new Point2D(AppPanel.getPlayer().getVelocity());
+	Point2D newPoint = new Point2D(player.getVelocity());
 
 	updateMovList(newPoint);
 
-	if(desiredPosition.distanceTo(AppPanel.getPlayer().getPosition()) > CAMERA_RETURN_DISTANCE) {
-	    Point2D centerDelta = Point2D.difference(desiredPosition, AppPanel.getPlayer().getPlayerCenter());
+	if(desiredPosition.distanceTo(player.getPosition()) > cameraReturnDistance) {
+	    Point2D centerDelta = Point2D.difference(desiredPosition, player.getPlayerCenter());
 	    double angleToCenter = Math.atan2(centerDelta.getY(), centerDelta.getX());
-	    Point2D toCenterDelta = Point2D.xyComponents(-CAMERA_RETURN_VELOCITY, angleToCenter);
-	    toCenterDelta = Point2D.clamp(toCenterDelta, mapBoundry()[0], mapBoundry()[1]);
+	    Point2D toCenterDelta = Point2D.xyComponents(-cameraReturnVelocity, angleToCenter);
+	    toCenterDelta = Point2D.clamp(toCenterDelta, mapBoundary()[0], mapBoundary()[1]);
 	    //move(toCenterDelta, universe);
 	}
 	Point2D listAvg = Point2D.listAverage(movementList);
@@ -48,44 +57,41 @@ public class Camera {
      * move method moves the universe and the player and updates the camera
      * @param Point2D, how much to move in pixels
      * @param Universe, the universe to move
-     * @return Nothing.
      */
     private void move(Point2D delta, Universe universe) {
 	universe.move(delta.inverted());
-	AppPanel.getPlayer().move(delta.inverted());
+	player.move(delta.inverted());
 	currentPosition.add(delta);
     }
 
     /**
      * updateMovList updates the movementList that the camera follows and clamps the allowed points within the map boundries
      * @param Point2D, the next point that should be added to the movementlist.
-     * @return Nothing.
      */
     public void updateMovList(Point2D sample) {
 	// Set velocity sample to 0 if the player is close to a map border
-	if (currentPosition.getX() < mapBoundry()[0].getX()) sample.setX(Math.max(0, sample.getX()));
-	if (currentPosition.getX() > mapBoundry()[1].getX()) sample.setX(Math.min(0, sample.getX()));
-	if (currentPosition.getY() < mapBoundry()[0].getY()) sample.setY(Math.max(0, sample.getY()));
-	if (currentPosition.getY() > mapBoundry()[1].getY()) sample.setY(Math.min(0, sample.getY()));
+	if (currentPosition.getX() < mapBoundary()[0].getX()) sample.setX(Math.max(0, sample.getX()));
+	if (currentPosition.getX() > mapBoundary()[1].getX()) sample.setX(Math.min(0, sample.getX()));
+	if (currentPosition.getY() < mapBoundary()[0].getY()) sample.setY(Math.max(0, sample.getY()));
+	if (currentPosition.getY() > mapBoundary()[1].getY()) sample.setY(Math.min(0, sample.getY()));
 
         // Add samples and remove the first sample if the list gets too big
 	movementList.add(sample);
-        if (movementList.size() > MAX_MOV_LIST_SAMPLES){
+        if (movementList.size() > maxMovListSamples){
             movementList.remove(0);
 	}
     }
 
     /**
-     * mapBoundry returns the location of the border of the map with regard to the screen dimensions
+     * mapBoundary returns the location of the border of the map with regard to the screen dimensions
      * This tells us how much we can move the screen without the camera leaving the map
-     * @param PNothing.
      * @return Point2D, the location of the border.
      */
 
-    private static Point2D[] mapBoundry() {
-	float right = AppPanel.getMapWidth()/2 - AppPanel.getScreenWidth()/2;
+    private Point2D[] mapBoundary() {
+	float right = appPanel.getMapWidth()/2 - appPanel.getScreenWidth()/2;
 	float left = -right;
-	float down = AppPanel.getMapHeight()/2 - AppPanel.getScreenHeight()/2;
+	float down = appPanel.getMapHeight()/2 - appPanel.getScreenHeight()/2;
 	float up = -down;
 
 	return new Point2D[]{new Point2D(left, up), new Point2D(right, down)};
